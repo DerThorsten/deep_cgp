@@ -1,4 +1,4 @@
-
+1
 
 import numpy
 import numbers
@@ -9,6 +9,7 @@ from .j3_module import J3Module
 import torch
 import torch.nn
 
+from torch.autograd import Variable
 
 
 
@@ -117,7 +118,7 @@ class Cell0PatchExtrator(object):
             coords_x0 = coords_x0[valid_mask]
             coords_x1 = coords_x1[valid_mask]
 
-            patch[coords_x0,coords_x1] = 255
+            patch[coords_x0,coords_x1] = 1
             # image_patch[coords_x0,coords_x1,:] = 0
 
 
@@ -347,23 +348,33 @@ class IsbiJ3(object):
 
 
             def predict(self, cell_0_index):
-                nn_input_image = self.extractor[cell_0_index]
+                nn_input_image = self.extractor[cell_0_index].astype('float32')
 
 
                 # nn_input_image shape atm : x,y,c
                 # => desired 1,c,x,y
                 nn_input_image = numpy.rollaxis(nn_input_image, 2,0)[None,...]
-                
+                nn_input_image = Variable(torch.from_numpy(nn_input_image))
                 res = self.nn(nn_input_image)
+                
+
+                #def softmax(x):
+                #    """Compute softmax values for each sets of scores in x."""
+                #    return numpy.exp(x) / numpy.sum(numpy.exp(x))
+
 
                 try:
                     res_numpy = res.data.numpy()
                 except:
                     res_numpy = res.numpy()
 
+
                 # TODO convert this
                 # to usable gt
                 return res_numpy
+                #return softmax(res_numpy)
+
+        return Predictor(extractor=cell_0_extractor, nn=self.nn_j3)
 
 
 if __name__ == "__main__":

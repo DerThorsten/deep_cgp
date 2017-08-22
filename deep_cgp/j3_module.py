@@ -18,6 +18,78 @@ def is_power2(num):
     return num != 0 and ((num & (num - 1)) == 0)
 
 
+
+
+
+class Classifier(nn.Module):
+
+    def __init__(self, x_j_channels_in, x_b_channels_in):
+        super(Classifier, self).__init__()
+
+
+        # numbers 
+        self.n_classes = 5
+        self.x_j_channels_in = x_j_channels_in
+        self.x_b_channels_in = x_b_channels_in
+
+        self.n_edge_feat = 512
+
+
+        # modules
+        self.edge_module = nn.Sequential(
+            nn.Linear(x_b_channels_in, self.n_edge_feat),
+            nn.PReLU(),
+            nn.BatchNorm1d(self.n_edge_feat),
+            nn.Dropout(),
+            #
+            nn.Linear(self.n_edge_feat, self.n_edge_feat),
+            nn.PReLU(),
+            nn.BatchNorm1d(self.n_edge_feat),
+            nn.Dropout(),
+            #
+            nn.Linear(self.n_edge_feat, self.n_edge_feat),
+            nn.PReLU(),
+            nn.BatchNorm1d(self.n_edge_feat),
+            nn.Dropout()
+        )
+
+        # j module
+        classifier_n_in  = 3*self.n_edge_feat  + x_j_channels_in
+
+        self.classifier = nn.Sequential(
+            nn.Linear(classifier_n_in, 2048),
+            nn.PReLU(),
+            nn.BatchNorm1d(2048),
+            nn.Dropout(),
+            nn.Linear(2048, 2048),
+            nn.PReLU(),
+            nn.BatchNorm1d(2048),
+            nn.Dropout(),
+            nn.Linear(2048, self.n_classes),
+            nn.PReLU(),
+            nn.Softmax()
+        )
+
+
+    def forward(self, x_j, x_b0, x_b1, x_b2):
+        
+        # improve the boundary features
+        x_b0   = self.edge_module(x_b0)
+        x_b1   = self.edge_module(x_b1)
+        x_b2   = self.edge_module(x_b2)
+
+        # concat
+        x_j = torch.cat([x_j, x_b0, x_b1, x_b2], 1)
+
+
+        return self.classifier(x_j)
+
+
+
+
+
+
+
 # => TODO
 # run this for each
 # each on its own!!
@@ -25,13 +97,13 @@ def is_power2(num):
 # edge! !!!!!!
 class SimpleMaskFeatureExtractor(nn.Module):
 
-    def __init__(self, n_channels_in):
+    def __init__(self, channels_in):
         super(SimpleMaskFeatureExtractor, self).__init__()
 
-        self.n_channels_in = n_channels_in
-        self.n_channels_out = 6*self.n_channels_in
-        self.batch_norm = nn.BatchNorm1d(n_channels_in)
-        self.nonlin = nn.PReLU()
+        self.channels_in = channels_in
+        self.channels_out = 2*self.channels_in
+        #self.batch_norm = nn.BatchNorm1d(self.channels_out)
+        #self.nonlin = nn.PReLU()
 
     def forward(self, x, mask_j):
 
@@ -54,6 +126,7 @@ class SimpleMaskFeatureExtractor(nn.Module):
         flat_mask2 = mask_j2.view(batch_size,1, n_pixel)
 
 
+      
         # get size of boundaries
         size_j0 = flat_mask0.sum(2).float()[:,:,0]
         size_j1 = flat_mask1.sum(2).float()[:,:,0]
@@ -64,23 +137,39 @@ class SimpleMaskFeatureExtractor(nn.Module):
 
         #print(x_flat.data.numpy().shape, flat_mask0.data.numpy().shape)
 
-        x0_sum = (x_flat * flat_mask0.expand_as(x_flat)).sum(2)[:,:,0]
-        x1_sum = (x_flat * flat_mask1.expand_as(x_flat)).sum(2)[:,:,0]
-        x2_sum = (x_flat * flat_mask2.expand_as(x_flat)).sum(2)[:,:,0]
+        mult_res0 = x_flat * flat_mask0.expand_as(x_flat)
+        mult_res1 = x_flat * flat_mask1.expand_as(x_flat)
+        mult_res2 = x_flat * flat_mask2.expand_as(x_flat)
+
+
+
+        x0_sum = (mult_res0).sum(2)[:,:,0]
+        x1_sum = (mult_res1).sum(2)[:,:,0]
+        x2_sum = (mult_res2).sum(2)[:,:,0]
 
         x0_mean = x0_sum /  size_j0.expand_as(x0_sum)
         x1_mean = x1_sum /  size_j1.expand_as(x1_sum)
         x2_mean = x2_sum /  size_j2.expand_as(x2_sum)
 
 
-        flat_feats = torch.cat([x0_sum, x1_sum, x2_sum, x0_mean, x1_mean, x2_mean],1)
+        # cannot use min since zerors from mask
+        #print("aa", (mult_res0).max(2))
+        x0_max,_ = (mult_res0).max(2)
+        x1_max,_ = (mult_res1).max(2)
+        x2_max,_ = (mult_res2).max(2)
 
-        #print("flat feats", flat_feats.size())
+        x0_max = x0_max[:,:,0]
+        x1_max = x1_max[:,:,0]
+        x2_max = x2_max[:,:,0]
 
-        flat_feats = self.batch_norm(flat_feats)
-        flat_feats = self.nonlin(flat_feats)
 
-        return flat_feats
+
+        xb_0 = torch.cat([x0_sum, x0_mean, x0_max],1)
+        xb_1 = torch.cat([x1_sum, x1_mean, x1_max],1)
+        xb_2 = torch.cat([x2_sum, x2_mean, x2_max],1)
+
+
+        return xb_0, xb_1, xb_2
 
 
 class ReImageFlatFeatures(nn.Module):
@@ -98,16 +187,6 @@ class ReImageFlatFeatures(nn.Module):
         x_unflat_image = x.expand((batch_size,-1,shaptial_shape[0], shaptial_shape[1]))
 
         return x_unflat_image
-
-
-# random todo =):
-#
-# also use also vec-3  gt,
-# => with that we can 
-# have a mlp for each edge
-# 
-
-
 
 
 
@@ -194,6 +273,8 @@ class DenseBlock(nn.Module):
                 self.conv_blocks[i] = ConvModule(channels_in=current_channels_in, channels_out=channels_out)
             else:
                 self.conv_blocks[i] = ConvModuleEnd(channels_in=current_channels_in, channels_out=channels_out)
+
+        self.conv_blocks = nn.ModuleList(self.conv_blocks)
     def forward(self, x0):
 
         current_input_list = [x0]
@@ -249,28 +330,17 @@ class J3Module(nn.Module):
         #classifier_n_in = (fully_connected_size**2) * channels_out
         
         # mask feature layer
-        self.simple_mask_feature =  SimpleMaskFeatureExtractor()
+        self.simple_mask_feature =  SimpleMaskFeatureExtractor(channels_in=channels_out)
+
 
         # at the end we have
-        classifier_n_in = (self.n_downsample_steps + 1) * channels_out * (fully_connected_size**2)
-        classifier_n_in += 60
+        x_j_channels_in = (self.n_downsample_steps + 1) * channels_out * (fully_connected_size**2)
 
+        x_b_channels_in = (self.n_downsample_steps) * channels_out * 3
 
-        # the normal classifier
-        self.classifier = nn.Sequential(
-            nn.Linear(classifier_n_in, 1024),
-            nn.PReLU(),
-            nn.BatchNorm1d(1024),
-            nn.Dropout(),
-            nn.Linear(1024, 1024),
-            nn.PReLU(),
-            nn.BatchNorm1d(1024),
-            nn.Dropout(),
-            nn.Linear(1024, 5),
-            nn.PReLU(),
-            #nn.Softmax()
-        )
-
+        # the final classifier
+        self.classifier = Classifier(x_j_channels_in=x_j_channels_in,
+                                     x_b_channels_in=x_b_channels_in)
 
     def crop(self, x, in_size, out_size):
 
@@ -287,7 +357,7 @@ class J3Module(nn.Module):
 
         mask_j = x[:,1:4,:,:]
 
-
+        current_res_mask_j = mask_j 
 
         fully_connected_size_crops = []
 
@@ -297,7 +367,9 @@ class J3Module(nn.Module):
         current_size = self.patch_size
 
 
-        flat_feats = []
+        xb_0 = []
+        xb_1 = []
+        xb_2 = []
 
         for i in range(self.n_downsample_steps):
             #print("DS",i)
@@ -307,40 +379,44 @@ class J3Module(nn.Module):
             x = conv_layer(x)
 
 
-            if i == 0 :
-                flat_feat = self.simple_mask_feature(x, mask_j)
-                flat_feats.append(flat_feat)
+
+            ff_0, ff_1, ff_2 = self.simple_mask_feature(x, current_res_mask_j)
+            xb_0.append(ff_0)
+            xb_1.append(ff_1)
+            xb_2.append(ff_2)
 
             x_crop_fully = self.crop(x, in_size=current_size, out_size=self.fully_connected_size)
             fully_connected_size_crops.append(x_crop_fully)
 
 
-            # pool
+            # pool features
             x = self.pool(x)
+
+            # pool masks
+            current_res_mask_j = self.pool(current_res_mask_j)
 
             # update current size
             current_size = current_size//2
 
         fully_connected_size_crops.append(x)
 
-        x = torch.cat(fully_connected_size_crops,1)
+        x_j = torch.cat(fully_connected_size_crops,1)
 
 
 
         # convert the image to flat 
         # features
-        x = x.contiguous()
+        x_j = x_j.contiguous()
+        x_j = x_j.view(x_j.size(0), -1)
+
+        # bounary features
+        xb_0 = torch.cat(xb_0,1)
+        xb_1 = torch.cat(xb_1,1)
+        xb_2 = torch.cat(xb_2,1)
+
+
+
         #print('shape',x.size())
-        x = x.view(x.size(0), -1)
-
-
-        #print("jumjum",x.size(),flat_feats[0].size())
-        flat_feats.append(x)
-        flat_feats = torch.cat(flat_feats, 1)
-
-
-
-        #print('shape',x.size())
-        res = self.classifier(flat_feats)
+        res = self.classifier(x_j, xb_0, xb_1, xb_2)
 
         return res

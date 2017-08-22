@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import random
+
 sys.path.append('/home/tbeier/src/deep_cgp/')
 import deep_cgp
 
@@ -29,6 +31,8 @@ import matplotlib.cm as cm
 import torch
 import torch.nn
 from torch.autograd import Variable
+
+
 
 #############################################################
 # Download  ISBI 2012:
@@ -82,9 +86,9 @@ gt_dset   = gt_dsets['train']
 # the patch extractor
 patch_radius = (2**6-2)//2
 fully_connected_size = 16
-batch_size = 75
+batch_size = 100
 
-name = "blae2t"
+name = "very_legendary_12"
 filename_model = "/home/tbeier/src/deep_cgp/sandbox/%s_model_fb.pytorch"%name
 filename_opt = "/home/tbeier/src/deep_cgp/sandbox/%s_optimizer_fb.pytorch"%name
 
@@ -114,7 +118,7 @@ if True:
 
 
     # the optimizer
-    learning_rate = 0.001
+    learning_rate = 0.025
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 
@@ -153,7 +157,7 @@ if True:
         batch_gt_quali = numpy.require(batch_gt_quali, dtype='float32')
 
         # convert numpy to torch create variables
-        batch_imgs = Variable(torch.from_numpy(batch_imgs), requires_grad=True)
+        batch_imgs = Variable(torch.from_numpy(batch_imgs), requires_grad=False)
         batch_gt   = Variable(torch.from_numpy(batch_gt))
         batch_gt_quali   = Variable(torch.from_numpy(batch_gt_quali))
 
@@ -174,11 +178,44 @@ if True:
         # save optimizer
         torch.save(optimizer.state_dict(), filename_opt)
 
-
-
         # do gradient step
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
 
+else:
+
+
+    raw_dset  = raw_dsets['test']/255.0 - 0.7
+    pmap_dset = pmap_dsets['test']
+    #gt_dset   = gt_dsets['test']
+
+    isbi_j3 = deep_cgp.IsbiJ3(patch_radius=patch_radius, fully_connected_size=fully_connected_size)
+
+
+    slice_index = 10 
+
+    threshold = 0.3
+    overseg = nifty.segmentation.distanceTransformWatersheds(pmap_dset[slice_index, :,:].copy(), 
+            threshold=threshold)
+
+    hl_cgp = deep_cgp.HlCgp(overseg)
+
+
+    predictor = isbi_j3.predictor(hl_cgp=hl_cgp, raw_slice=raw_dset[slice_index, :,:])
+
+    print("load model")
+    model = isbi_j3.model()
+    model.load_state_dict(torch.load(filename_model))
+
+    cell_0_bounds = hl_cgp.cell_bounds[0]
+    for cell_0_index in  range(hl_cgp.n_cells[0]):
+        #print(cell_0_index,hl_cgp.n_cells[0])
+        cell_0_label = cell_0_index + 1
+        bounds = cell_0_bounds[cell_0_index]
+        if len(bounds) == 3:
+
+            prediction = predictor.predict(cell_0_index=cell_0_index)
+
+            print(numpy.argmax(prediction))
