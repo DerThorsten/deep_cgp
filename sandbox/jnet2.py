@@ -88,7 +88,7 @@ patch_radius = (2**6-2)//2
 fully_connected_size = 16
 batch_size = 100
 
-name = "very_legendary_12"
+name = "very_legendary_14"
 filename_model = "/home/tbeier/src/deep_cgp/sandbox/%s_model_fb.pytorch"%name
 filename_opt = "/home/tbeier/src/deep_cgp/sandbox/%s_optimizer_fb.pytorch"%name
 
@@ -208,7 +208,7 @@ else:
     print("load model")
     model = isbi_j3.model()
     model.load_state_dict(torch.load(filename_model))
-
+    model.eval()
     cell_0_bounds = hl_cgp.cell_bounds[0]
     for cell_0_index in  range(hl_cgp.n_cells[0]):
         #print(cell_0_index,hl_cgp.n_cells[0])

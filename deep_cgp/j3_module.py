@@ -40,17 +40,17 @@ class Classifier(nn.Module):
             nn.Linear(x_b_channels_in, self.n_edge_feat),
             nn.PReLU(),
             nn.BatchNorm1d(self.n_edge_feat),
-            nn.Dropout(),
+            nn.Dropout(0.1),
             #
             nn.Linear(self.n_edge_feat, self.n_edge_feat),
             nn.PReLU(),
             nn.BatchNorm1d(self.n_edge_feat),
-            nn.Dropout(),
+            nn.Dropout(0.1),
             #
             nn.Linear(self.n_edge_feat, self.n_edge_feat),
             nn.PReLU(),
             nn.BatchNorm1d(self.n_edge_feat),
-            nn.Dropout()
+            nn.Dropout(0.1)
         )
 
         # j module
@@ -60,13 +60,12 @@ class Classifier(nn.Module):
             nn.Linear(classifier_n_in, 2048),
             nn.PReLU(),
             nn.BatchNorm1d(2048),
-            nn.Dropout(),
+            nn.Dropout(0.1),
             nn.Linear(2048, 2048),
             nn.PReLU(),
             nn.BatchNorm1d(2048),
-            nn.Dropout(),
+            nn.Dropout(0.1),
             nn.Linear(2048, self.n_classes),
-            nn.PReLU(),
             nn.Softmax()
         )
 
