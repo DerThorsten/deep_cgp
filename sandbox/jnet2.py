@@ -86,15 +86,15 @@ gt_dset   = gt_dsets['train']
 # the patch extractor
 patch_radius = (2**6-2)//2
 fully_connected_size = 16
-batch_size = 100
+batch_size = 50
 
-name = "very_legendary_14"
+name = "super_long_run"
 filename_model = "/home/tbeier/src/deep_cgp/sandbox/%s_model_fb.pytorch"%name
 filename_opt = "/home/tbeier/src/deep_cgp/sandbox/%s_optimizer_fb.pytorch"%name
 
 
 def adjust_learning_rate(optimizer, epoch, base_lr):
-    lr = base_lr * (0.80 ** (epoch // 10))
+    lr = base_lr * (0.95 ** (epoch // 100))
     for param_group in optimizer.param_groups:
         param_group['lr'] = max(lr,0.0000001)
     return lr
@@ -118,9 +118,9 @@ if True:
 
 
     # the optimizer
-    learning_rate = 0.025
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-
+    learning_rate = 0.1
+    #optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
 
 
 
@@ -172,11 +172,13 @@ if True:
         print("epoch",epoch,"lr",elr,"loss", loss.data.numpy()[0])
 
 
-        # save parameters
-        torch.save(model.state_dict(), filename_model)
+        if epoch + 1 % 20 == 0:
 
-        # save optimizer
-        torch.save(optimizer.state_dict(), filename_opt)
+            # save parameters
+            torch.save(model.state_dict(), filename_model)
+
+            # save optimizer
+            torch.save(optimizer.state_dict(), filename_opt)
 
         # do gradient step
         optimizer.zero_grad()
